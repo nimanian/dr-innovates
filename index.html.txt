@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr-Inovates</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Link to the CSS file -->
+</head>
+<body>
+    <!-- Header Section -->
+    <header>
+        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Main Content Section -->
+    <main>
+        <section id="home">
+            <h1>Welcome to Dr-Inovates</h1>
+            <p>Your trusted partner in innovative medical solutions.</p>
+        </section>
+
+        <section id="about">
+            <h2>About Dr-Inovates</h2>
+            <p>Learn more about the doctor and the mission of Dr-Inovates.</p>
+        </section>
+
+        <section id="services">
+            <h2>Our Services</h2>
+            <p>Discover the services we offer to enhance your medical experience.</p>
+        </section>
+
+        <section id="contact">
+            <h2>Contact Us</h2>
+            <form>
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email">
+                <textarea name="message" id="message" rows="4" placeholder="Your message"></textarea>
+                <button type="submit">Send Message</button>
+            </form>
+        </section>
+
+        <!-- Voice Recording Section -->
+        <section id="voice-recording">
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
+            <button id="playRecord" disabled>Play Recording</button>
+            <br><br>
+            <audio id="audioPlayer" controls></audio>
+        </section>
+    </main>
+
+    <!-- Footer Section -->
+    <footer>
+        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+    </footer>
+
+    <!-- Voice Recording Script -->
+    <script>
+        // Initialize variables
+        let mediaRecorder;
+        let audioChunks = [];
+        const startRecordBtn = document.getElementById('startRecord');
+        const stopRecordBtn = document.getElementById('stopRecord');
+        const playRecordBtn = document.getElementById('playRecord');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        // Start Recording
+        startRecordBtn.addEventListener('click', () => {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        audioPlayer.src = audioUrl;
+                    };
+                    mediaRecorder.start();
+                    startRecordBtn.disabled = true;
+                    stopRecordBtn.disabled = false;
+                    playRecordBtn.disabled = true;
+                })
+                .catch(error => {
+                    console.error('Error accessing the microphone:', error);
+                });
+        });
+
+        // Stop Recording
+        stopRecordBtn.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startRecordBtn.disabled = false;
+            stopRecordBtn.disabled = true;
+            playRecordBtn.disabled = false;
+        });
+
+        // Play the Recorded Audio
+        playRecordBtn.addEventListener('click', () => {
+            audioPlayer.play();
+        });
+    </script>
+</body>
+</html>
