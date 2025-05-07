@@ -83,6 +83,7 @@
         startRecordBtn.addEventListener('click', () => {
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
+                    audioChunks = [];
                     mediaRecorder = new MediaRecorder(stream);
                     mediaRecorder.ondataavailable = event => {
                         audioChunks.push(event.data);
