@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dr-Inovates</title>
-    <link rel="stylesheet" href="styles.css"> <!-- Link to the CSS file -->
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <!-- Header Section -->
@@ -20,7 +20,6 @@
         </nav>
     </header>
 
-    <!-- Main Content Section -->
     <main>
         <section id="home">
             <h1>Welcome to Dr-Inovates</h1>
@@ -49,7 +48,6 @@
             </form>
         </section>
 
-        <!-- Voice Recording Section -->
         <section id="voice-recording">
             <h2>Voice Recording</h2>
             <button id="startRecord">Start Recording</button>
@@ -60,7 +58,6 @@
         </section>
     </main>
 
-    <!-- Footer Section -->
     <footer>
         <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
     </footer>
@@ -72,7 +69,7 @@
         AWS.config.update({
             region: 'ap-southeast-2',
             credentials: new AWS.CognitoIdentityCredentials({
-                IdentityPoolId: 'ap-southeast-2:4fab4693-33c5-4ba7-923e-6a1b1b9e1f4b'  // Your new Cognito Identity Pool ID
+                IdentityPoolId: 'ap-southeast-2:4fab4693-33c5-4ba7-923e-6a1b1b9e1f4b'
             })
         });
 
@@ -87,7 +84,6 @@
         // Start Recording
         startRecordBtn.addEventListener('click', () => {
             audioChunks = []; // Clear previous recordings
-
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     mediaRecorder = new MediaRecorder(stream);
@@ -98,8 +94,6 @@
                         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
                         const audioUrl = URL.createObjectURL(audioBlob);
                         audioPlayer.src = audioUrl;
-
-                        // Upload to Amazon S3 after recording stops
                         uploadAudioToS3(audioBlob);
                     };
                     mediaRecorder.start();
@@ -128,14 +122,12 @@
         // Upload the recorded audio to Amazon S3
         function uploadAudioToS3(audioBlob) {
             const params = {
-                Bucket: 'pm-dr-inovates-audio',  // Your new S3 bucket name
-                Key: 'audio/latest-recording.wav', // Overwrites previous recording
+                Bucket: 'pm-dr-inovates-audio',
+                Key: 'audio/latest-recording.wav',
                 Body: audioBlob,
                 ContentType: 'audio/wav',
             };
-
             console.log("Uploading to S3...");
-
             s3.upload(params, function(err, data) {
                 if (err) {
                     console.error('Error uploading file:', err);
