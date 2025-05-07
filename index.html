@@ -49,14 +49,18 @@
             </form>
         </section>
 
-        <!-- Voice Recording Section -->
+        <!-- Voice Recording Section -->    
         <section id="voice-recording">
             <h2>Voice Recording</h2>
             <button id="startRecord">Start Recording</button>
             <button id="stopRecord" disabled>Stop Recording</button>
             <button id="playRecord" disabled>Play Recording</button>
+            <button id="transcribeBtn">Transcribe</button>
             <br><br>
             <audio id="audioPlayer" controls></audio>
+            <br><br>
+            <h3>Transcript:</h3>
+            <textarea id="transcriptText" rows="4" cols="50" readonly></textarea>
         </section>
     </main>
 
@@ -110,6 +114,33 @@
         playRecordBtn.addEventListener('click', () => {
             audioPlayer.play();
         });
+
+        // Transcribe Button
+const transcribeBtn = document.getElementById('transcribeBtn');
+const transcriptText = document.getElementById('transcriptText');
+
+transcribeBtn.addEventListener('click', () => {
+        if (!('webkitSpeechRecognition' in window)) {
+            alert('Speech recognition not supported in this browser. Please use Chrome.');
+        } else {
+            const recognition = new webkitSpeechRecognition();
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+    
+            recognition.start();
+    
+            recognition.onresult = event => {
+                const transcript = event.results[0][0].transcript;
+                transcriptText.value = transcript;
+            };
+    
+            recognition.onerror = event => {
+                console.error('Speech recognition error:', event.error);
+                transcriptText.value = "Error during transcription.";
+            };
+        }
+    });
     </script>
 </body>
 </html>
