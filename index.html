@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Dr-Inovates</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
     <!-- Header Section -->
@@ -31,7 +31,7 @@
             <audio id="audioPlayer" controls></audio>
         </section>
 
-        <!-- Transcript Section -->
+        <!-- Transcript Display Section -->
         <section id="transcript-display">
             <h2>Transcript</h2>
             <textarea id="transcriptBox" rows="8" cols="80" readonly placeholder="Transcript will appear here..."></textarea>
@@ -44,9 +44,8 @@
         <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
     </footer>
 
-    <!-- AWS SDK -->
+    <!-- AWS SDK & JavaScript Logic -->
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
-
     <script>
         window.onload = function () {
             // AWS Configuration
@@ -98,12 +97,12 @@
                 playRecordBtn.disabled = false;
             });
 
-            // Play Audio
+            // Play the Recorded Audio
             playRecordBtn.addEventListener('click', () => {
                 audioPlayer.play();
             });
 
-            // Upload Audio to S3
+            // Upload audio to S3 and auto-start transcription
             function uploadAudioToS3(audioBlob) {
                 const params = {
                     Bucket: 'pm-dr-inovates-audio',
@@ -111,6 +110,7 @@
                     Body: audioBlob,
                     ContentType: 'audio/wav',
                 };
+
                 console.log("Uploading to S3...");
                 s3.upload(params, function(err, data) {
                     if (err) {
@@ -118,11 +118,27 @@
                     } else {
                         console.log('File uploaded successfully:', data);
                         alert('Audio uploaded to S3 successfully!');
+                        triggerTranscription(); // Auto-start transcription
                     }
                 });
             }
 
-            // Fetch Transcript from API Gateway
+            function triggerTranscription() {
+                fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript", {
+                    method: "POST"
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Transcription job started:", data);
+                    alert("Transcription job started.");
+                })
+                .catch(error => {
+                    console.error("Failed to start transcription:", error);
+                    alert("Failed to trigger transcription.");
+                });
+            }
+
+            // Fetch and display the transcript
             document.getElementById('fetchTranscript').addEventListener('click', () => {
                 fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
                     .then(response => {
@@ -138,7 +154,7 @@
                                 const body = JSON.parse(data.body);
                                 transcript = body.transcript;
                             } catch (e) {
-                                console.error("Failed to parse JSON body:", e);
+                                console.error("Error parsing body:", e);
                             }
                         }
                         document.getElementById('transcriptBox').value = transcript || "No transcript found.";
