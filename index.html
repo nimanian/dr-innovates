@@ -120,23 +120,30 @@
             }
 
             // Fetch transcript from API Gateway and display it
-            document.getElementById('fetchTranscript').addEventListener('click', () => {
-                fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error("Failed to fetch transcript");
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        document.getElementById('transcriptBox').value = data.transcript;
-                    })
-                    .catch(error => {
-                        console.error("Error:", error);
-                        alert("Could not fetch transcript. Try again later.");
-                    });
-            });
-        };
+           document.getElementById('fetchTranscript').addEventListener('click', () => {
+    fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Failed to fetch transcript");
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Check if data.body exists and is a stringified JSON
+            let transcript = data.transcript;
+            if (!transcript && data.body) {
+                const body = JSON.parse(data.body);
+                transcript = body.transcript;
+            }
+
+            document.getElementById('transcriptBox').value = transcript || "No transcript found.";
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("Could not fetch transcript. Try again later.");
+        });
+});
+
     </script>
 </body>
 </html>
