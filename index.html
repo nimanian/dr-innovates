@@ -56,6 +56,13 @@
             <br><br>
             <audio id="audioPlayer" controls></audio>
         </section>
+        <section id="transcript-display">
+            <h2>Transcript</h2>
+            <textarea id="transcriptBox" rows="8" cols="80" readonly placeholder="Transcript will appear here..."></textarea>
+            <br>
+            <button id="fetchTranscript">Get Transcript</button>
+        </section>
+
     </main>
 
     <footer>
@@ -137,6 +144,23 @@
                 }
             });
         }
+        document.getElementById('fetchTranscript').addEventListener('click', () => {
+    fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Failed to fetch transcript");
+            }
+            return response.json();
+        })
+        .then(data => {
+            document.getElementById('transcriptBox').value = data.transcript;
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("Could not fetch transcript. Try again later.");
+        });
+});
+
     </script>
 </body>
 </html>
