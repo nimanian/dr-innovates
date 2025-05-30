@@ -21,6 +21,7 @@
     </header>
 
     <main>
+        <!-- Voice Recording Section -->
         <section id="voice-recording">
             <h2>Voice Recording</h2>
             <button id="startRecord">Start Recording</button>
@@ -30,6 +31,7 @@
             <audio id="audioPlayer" controls></audio>
         </section>
 
+        <!-- Transcript Section -->
         <section id="transcript-display">
             <h2>Transcript</h2>
             <textarea id="transcriptBox" rows="8" cols="80" readonly placeholder="Transcript will appear here..."></textarea>
@@ -42,8 +44,9 @@
         <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
     </footer>
 
-    <!-- AWS SDK & Voice Recording Script -->
+    <!-- AWS SDK -->
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+
     <script>
         window.onload = function () {
             // AWS Configuration
@@ -64,7 +67,7 @@
 
             // Start Recording
             startRecordBtn.addEventListener('click', () => {
-                audioChunks = []; // Clear previous recordings
+                audioChunks = [];
                 navigator.mediaDevices.getUserMedia({ audio: true })
                     .then(stream => {
                         mediaRecorder = new MediaRecorder(stream);
@@ -95,12 +98,12 @@
                 playRecordBtn.disabled = false;
             });
 
-            // Play the Recorded Audio
+            // Play Audio
             playRecordBtn.addEventListener('click', () => {
                 audioPlayer.play();
             });
 
-            // Upload the recorded audio to Amazon S3
+            // Upload Audio to S3
             function uploadAudioToS3(audioBlob) {
                 const params = {
                     Bucket: 'pm-dr-inovates-audio',
@@ -119,31 +122,33 @@
                 });
             }
 
-            // Fetch transcript from API Gateway and display it
-           document.getElementById('fetchTranscript').addEventListener('click', () => {
-    fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
-        .then(response => {
-            if (!response.ok) {
-                throw new Error("Failed to fetch transcript");
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Check if data.body exists and is a stringified JSON
-            let transcript = data.transcript;
-            if (!transcript && data.body) {
-                const body = JSON.parse(data.body);
-                transcript = body.transcript;
-            }
-
-            document.getElementById('transcriptBox').value = transcript || "No transcript found.";
-        })
-        .catch(error => {
-            console.error("Error:", error);
-            alert("Could not fetch transcript. Try again later.");
-        });
-});
-
+            // Fetch Transcript from API Gateway
+            document.getElementById('fetchTranscript').addEventListener('click', () => {
+                fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error("Failed to fetch transcript");
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        let transcript = data.transcript;
+                        if (!transcript && data.body) {
+                            try {
+                                const body = JSON.parse(data.body);
+                                transcript = body.transcript;
+                            } catch (e) {
+                                console.error("Failed to parse JSON body:", e);
+                            }
+                        }
+                        document.getElementById('transcriptBox').value = transcript || "No transcript found.";
+                    })
+                    .catch(error => {
+                        console.error("Error:", error);
+                        alert("Could not fetch transcript. Try again later.");
+                    });
+            });
+        };
     </script>
 </body>
 </html>
