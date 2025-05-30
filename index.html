@@ -55,6 +55,8 @@
             <button id="playRecord" disabled>Play Recording</button>
             <br><br>
             <audio id="audioPlayer" controls></audio>
+            <br><br>
+            <textarea id="transcriptionBox" rows="4" placeholder="Real-time transcription will appear here..."></textarea>
         </section>
     </main>
 
@@ -74,16 +76,17 @@
         });
 
         const s3 = new AWS.S3();
+        const transcribeService = new AWS.TranscribeService();
         const startRecordBtn = document.getElementById('startRecord');
         const stopRecordBtn = document.getElementById('stopRecord');
         const playRecordBtn = document.getElementById('playRecord');
         const audioPlayer = document.getElementById('audioPlayer');
+        const transcriptionBox = document.getElementById('transcriptionBox');
         let mediaRecorder;
         let audioChunks = [];
 
-        // Start Recording
         startRecordBtn.addEventListener('click', () => {
-            audioChunks = []; // Clear previous recordings
+            audioChunks = [];
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(stream => {
                     mediaRecorder = new MediaRecorder(stream);
@@ -106,7 +109,6 @@
                 });
         });
 
-        // Stop Recording
         stopRecordBtn.addEventListener('click', () => {
             mediaRecorder.stop();
             startRecordBtn.disabled = false;
@@ -114,28 +116,78 @@
             playRecordBtn.disabled = false;
         });
 
-        // Play the Recorded Audio
         playRecordBtn.addEventListener('click', () => {
             audioPlayer.play();
         });
 
-        // Upload the recorded audio to Amazon S3
         function uploadAudioToS3(audioBlob) {
+            const fileName = 'audio/recording-' + Date.now() + '.wav';
             const params = {
                 Bucket: 'pm-dr-inovates-audio',
-                Key: 'audio/latest-recording.wav',
+                Key: fileName,
                 Body: audioBlob,
                 ContentType: 'audio/wav',
             };
-            console.log("Uploading to S3...");
+
             s3.upload(params, function(err, data) {
                 if (err) {
                     console.error('Error uploading file:', err);
                 } else {
-                    console.log('File uploaded successfully:', data);
-                    alert('Audio uploaded to S3 successfully!');
+                    console.log('File uploaded:', data.Location);
+                    alert('Audio uploaded to S3!');
+                    startTranscription(data.Location);
                 }
             });
+        }
+
+        function startTranscription(mediaFileUrl) {
+            const jobName = 'job-' + Date.now();
+            const params = {
+                TranscriptionJobName: jobName,
+                LanguageCode: 'en-US',
+                MediaFormat: 'wav',
+                Media: {
+                    MediaFileUri: mediaFileUrl
+                },
+                OutputBucketName: 'pm-dr-inovates-audio' // Optional: if you want output in S3
+            };
+
+            transcribeService.startTranscriptionJob(params, function(err, data) {
+                if (err) {
+                    console.error('Failed to start transcription job:', err);
+                } else {
+                    console.log('Transcription started:', data);
+                    pollTranscriptionResult(jobName);
+                }
+            });
+        }
+
+        function pollTranscriptionResult(jobName) {
+            const params = { TranscriptionJobName: jobName };
+
+            const interval = setInterval(() => {
+                transcribeService.getTranscriptionJob(params, function(err, data) {
+                    if (err) {
+                        console.error('Failed to get job status:', err);
+                        clearInterval(interval);
+                    } else {
+                        const status = data.TranscriptionJob.TranscriptionJobStatus;
+                        console.log('Status:', status);
+                        if (status === 'COMPLETED') {
+                            clearInterval(interval);
+                            fetch(data.TranscriptionJob.Transcript.TranscriptFileUri)
+                                .then(response => response.json())
+                                .then(json => {
+                                    const text = json.results.transcripts[0].transcript;
+                                    transcriptionBox.value = text;
+                                });
+                        } else if (status === 'FAILED') {
+                            clearInterval(interval);
+                            console.error('Transcription job failed.');
+                        }
+                    }
+                });
+            }, 5000); // Check every 5 seconds
         }
     </script>
 </body>
