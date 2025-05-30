@@ -45,96 +45,98 @@
     <!-- AWS SDK & Voice Recording Script -->
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
     <script>
-        // AWS Configuration
-        AWS.config.update({
-            region: 'ap-southeast-2',
-            credentials: new AWS.CognitoIdentityCredentials({
-                IdentityPoolId: 'ap-southeast-2:4fab4693-33c5-4ba7-923e-6a1b1b9e1f4b'
-            })
-        });
-
-        const s3 = new AWS.S3();
-        const startRecordBtn = document.getElementById('startRecord');
-        const stopRecordBtn = document.getElementById('stopRecord');
-        const playRecordBtn = document.getElementById('playRecord');
-        const audioPlayer = document.getElementById('audioPlayer');
-        let mediaRecorder;
-        let audioChunks = [];
-
-        // Start Recording
-        startRecordBtn.addEventListener('click', () => {
-            audioChunks = []; // Clear previous recordings
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    mediaRecorder = new MediaRecorder(stream);
-                    mediaRecorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        audioPlayer.src = audioUrl;
-                        uploadAudioToS3(audioBlob);
-                    };
-                    mediaRecorder.start();
-                    startRecordBtn.disabled = true;
-                    stopRecordBtn.disabled = false;
-                    playRecordBtn.disabled = true;
+        window.onload = function () {
+            // AWS Configuration
+            AWS.config.update({
+                region: 'ap-southeast-2',
+                credentials: new AWS.CognitoIdentityCredentials({
+                    IdentityPoolId: 'ap-southeast-2:4fab4693-33c5-4ba7-923e-6a1b1b9e1f4b'
                 })
-                .catch(error => {
-                    console.error('Error accessing the microphone:', error);
-                });
-        });
-
-        // Stop Recording
-        stopRecordBtn.addEventListener('click', () => {
-            mediaRecorder.stop();
-            startRecordBtn.disabled = false;
-            stopRecordBtn.disabled = true;
-            playRecordBtn.disabled = false;
-        });
-
-        // Play the Recorded Audio
-        playRecordBtn.addEventListener('click', () => {
-            audioPlayer.play();
-        });
-
-        // Upload the recorded audio to Amazon S3
-        function uploadAudioToS3(audioBlob) {
-            const params = {
-                Bucket: 'pm-dr-inovates-audio',
-                Key: 'audio/latest-recording.wav',
-                Body: audioBlob,
-                ContentType: 'audio/wav',
-            };
-            console.log("Uploading to S3...");
-            s3.upload(params, function(err, data) {
-                if (err) {
-                    console.error('Error uploading file:', err);
-                } else {
-                    console.log('File uploaded successfully:', data);
-                    alert('Audio uploaded to S3 successfully!');
-                }
             });
-        }
 
-        // Fetch transcript from API Gateway and display it
-        document.getElementById('fetchTranscript').addEventListener('click', () => {
-            fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("Failed to fetch transcript");
+            const s3 = new AWS.S3();
+            const startRecordBtn = document.getElementById('startRecord');
+            const stopRecordBtn = document.getElementById('stopRecord');
+            const playRecordBtn = document.getElementById('playRecord');
+            const audioPlayer = document.getElementById('audioPlayer');
+            let mediaRecorder;
+            let audioChunks = [];
+
+            // Start Recording
+            startRecordBtn.addEventListener('click', () => {
+                audioChunks = []; // Clear previous recordings
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.ondataavailable = event => {
+                            audioChunks.push(event.data);
+                        };
+                        mediaRecorder.onstop = () => {
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            const audioUrl = URL.createObjectURL(audioBlob);
+                            audioPlayer.src = audioUrl;
+                            uploadAudioToS3(audioBlob);
+                        };
+                        mediaRecorder.start();
+                        startRecordBtn.disabled = true;
+                        stopRecordBtn.disabled = false;
+                        playRecordBtn.disabled = true;
+                    })
+                    .catch(error => {
+                        console.error('Error accessing the microphone:', error);
+                    });
+            });
+
+            // Stop Recording
+            stopRecordBtn.addEventListener('click', () => {
+                mediaRecorder.stop();
+                startRecordBtn.disabled = false;
+                stopRecordBtn.disabled = true;
+                playRecordBtn.disabled = false;
+            });
+
+            // Play the Recorded Audio
+            playRecordBtn.addEventListener('click', () => {
+                audioPlayer.play();
+            });
+
+            // Upload the recorded audio to Amazon S3
+            function uploadAudioToS3(audioBlob) {
+                const params = {
+                    Bucket: 'pm-dr-inovates-audio',
+                    Key: 'audio/latest-recording.wav',
+                    Body: audioBlob,
+                    ContentType: 'audio/wav',
+                };
+                console.log("Uploading to S3...");
+                s3.upload(params, function(err, data) {
+                    if (err) {
+                        console.error('Error uploading file:', err);
+                    } else {
+                        console.log('File uploaded successfully:', data);
+                        alert('Audio uploaded to S3 successfully!');
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    document.getElementById('transcriptBox').value = data.transcript;
-                })
-                .catch(error => {
-                    console.error("Error:", error);
-                    alert("Could not fetch transcript. Try again later.");
                 });
-        });
+            }
+
+            // Fetch transcript from API Gateway and display it
+            document.getElementById('fetchTranscript').addEventListener('click', () => {
+                fetch("https://3m1lblyoj5.execute-api.ap-southeast-2.amazonaws.com/stg/transcript")
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error("Failed to fetch transcript");
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        document.getElementById('transcriptBox').value = data.transcript;
+                    })
+                    .catch(error => {
+                        console.error("Error:", error);
+                        alert("Could not fetch transcript. Try again later.");
+                    });
+            });
+        };
     </script>
 </body>
 </html>
