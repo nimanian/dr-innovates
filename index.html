@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Dr-Inovates</title>
-    <link rel="stylesheet" href="styles.css"> <!-- Link to the CSS file -->
+    <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <!-- Header Section -->
     <header>
         <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
         <nav>
@@ -20,110 +19,74 @@
         </nav>
     </header>
 
-    <!-- Main Content Section -->
     <main>
-        <!-- Voice Recording Section -->
         <section id="voice-recording">
-            <h2>Voice Recording</h2>
-            <button id="startRecord">Start Recording</button>
-            <button id="stopRecord" disabled>Stop Recording</button>
-            <button id="playRecord" disabled>Play Recording</button>
-           
+            <h2>Voice Recording (Real-Time)</h2>
+            <button id="startStream">Start Real-Time Transcription</button>
+            <button id="stopStream" disabled>Stop</button>
             <br><br>
-            <audio id="audioPlayer" controls></audio>
+            <textarea id="transcriptBox" rows="10" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
         </section>
-
-       
     </main>
 
-    <!-- Footer Section -->
     <footer>
         <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
     </footer>
 
-    <!-- AWS SDK & Voice Recording Script -->
+    <!-- AWS SDK -->
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+    <!-- Amazon Transcribe WebSocket Client -->
+    <script src="https://cdn.jsdelivr.net/npm/amazon-transcribe-websocket@1.0.5/dist/amazon-transcribe.min.js"></script>
+
     <script>
-        // AWS Configuration - Replace with your AWS settings
-        AWS.config.update({
-            region: 'ap-southeast-2', // Replace with your AWS region
-            credentials: new AWS.CognitoIdentityCredentials({
-                IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'  // Replace with your Cognito Identity Pool ID
-            })
+        AWS.config.region = 'ap-southeast-2';
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
         });
 
-        const s3 = new AWS.S3();
-        const startRecordBtn = document.getElementById('startRecord');
-        const stopRecordBtn = document.getElementById('stopRecord');
-        const playRecordBtn = document.getElementById('playRecord');
-        const audioPlayer = document.getElementById('audioPlayer');
-        let mediaRecorder;
-        let audioChunks = [];
+        const startButton = document.getElementById('startStream');
+        const stopButton = document.getElementById('stopStream');
+        const transcriptBox = document.getElementById('transcriptBox');
 
-        // Start Recording
-        startRecordBtn.addEventListener('click', () => {
-            // Clear previous recording chunks
-            audioChunks = [];
-            
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    mediaRecorder = new MediaRecorder(stream);
-                    mediaRecorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        audioPlayer.src = audioUrl;
+        let transcriber;
 
-                        // Upload to Amazon S3 after recording stops (this will overwrite the previous file)
-                        uploadAudioToS3(audioBlob);
-                    };
-                    mediaRecorder.start();
-                    startRecordBtn.disabled = true;
-                    stopRecordBtn.disabled = false;
-                    playRecordBtn.disabled = true;
-                   
-                })
-                .catch(error => {
-                    console.error('Error accessing the microphone:', error);
-                });
-        });
+        startButton.addEventListener('click', async () => {
+            transcriptBox.value = "";
+            startButton.disabled = true;
+            stopButton.disabled = false;
 
-        // Stop Recording
-            stopRecordBtn.addEventListener('click', () => {
-            mediaRecorder.stop();
-            startRecordBtn.disabled = false;
-            stopRecordBtn.disabled = true;
-            playRecordBtn.disabled = false;
-           
-        });
-
-        // Play the Recorded Audio
-        playRecordBtn.addEventListener('click', () => {
-            audioPlayer.play();
-        });
-
-        // Upload the recorded audio to Amazon S3 with the same filename each time (overwrite previous file)
-        function uploadAudioToS3(audioBlob) {
-            const params = {
-                Bucket: 'pm-chatgpt-test',  // Your S3 bucket name
-                Key: 'audio/latest-recording.wav', // Fixed file name to replace the previous recording
-                Body: audioBlob,
-                ContentType: 'audio/wav',
-            };
-
-            console.log("Uploading to S3..."); // Add logging to track the upload process
-
-            s3.upload(params, function(err, data) {
-                if (err) {
-                    console.log('Error uploading file:', err);
-                } else {
-                    console.log('File uploaded successfully:', data);
-                    alert('Audio uploaded to S3 successfully!');
+            transcriber = new AmazonTranscribe({
+                region: 'ap-southeast-2',
+                credentials: AWS.config.credentials,
+                languageCode: 'en-US',
+                sampleRate: 44100,
+                streamAudioFromBrowser: true,
+                transcriptionEventHandler: event => {
+                    const results = event.Transcript.Results;
+                    if (results.length > 0 && results[0].Alternatives.length > 0) {
+                        const transcript = results[0].Alternatives[0].Transcript;
+                        if (!results[0].IsPartial) {
+                            transcriptBox.value += transcript + '\n';
+                        }
+                    }
+                },
+                errorHandler: err => {
+                    console.error('Transcribe error:', err);
+                    alert('Real-time transcription failed. Check console.');
+                },
+                onConnectionClose: () => {
+                    console.log("Transcribe connection closed.");
                 }
             });
-        }
+
+            await transcriber.start();
+        });
+
+        stopButton.addEventListener('click', async () => {
+            stopButton.disabled = true;
+            startButton.disabled = false;
+            if (transcriber) await transcriber.stop();
+        });
     </script>
 </body>
 </html>
