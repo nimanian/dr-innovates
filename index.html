@@ -143,8 +143,9 @@
     });
 
     function uploadAudioToS3(audioBlob) {
+ 
       const params = {
-        Bucket: 'pm-chatgpt-test',
+        Bucket: 'pm-dr-inovates-audio',
         Key: 'audio/latest-recording.wav',
         Body: audioBlob,
         ContentType: 'audio/wav',
@@ -172,15 +173,14 @@
         }
     
         const blob = new Blob([transcriptText], { type: 'text/plain' });
-    
-        const params = {
+ 
         const params = {
             Bucket: 'pm-dr-inovates-audio',
             Key: 'transcripts/latest-transcript.txt',
             Body: blob,
             ContentType: 'text/plain',
         };
-    
+      
         console.log("Uploading transcript to S3...");
     
         s3.upload(params, function(err, data) {
