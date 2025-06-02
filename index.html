@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dr-Inovates</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header>
@@ -21,11 +21,13 @@
 
     <main>
         <section id="voice-recording">
-            <h2>Voice Recording (Real-Time)</h2>
-            <button id="startStream">Start Real-Time Transcription</button>
-            <button id="stopStream" disabled>Stop</button>
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
             <br><br>
-            <textarea id="transcriptBox" rows="10" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
+            <audio id="audioPlayer" controls></audio>
+            <h3>Live Transcript:</h3>
+            <textarea id="liveTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
         </section>
     </main>
 
@@ -33,10 +35,8 @@
         <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
     </footer>
 
-    <!-- AWS SDK -->
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
-    <!-- Amazon Transcribe WebSocket Client -->
-    <script src="https://cdn.jsdelivr.net/npm/amazon-transcribe-websocket@1.0.5/dist/amazon-transcribe.min.js"></script>
+    <script src="https://unpkg.com/microphone-stream@6.1.0/dist/microphone-stream.min.js"></script>
 
     <script>
         AWS.config.region = 'ap-southeast-2';
@@ -44,49 +44,821 @@
             IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
         });
 
-        const startButton = document.getElementById('startStream');
-        const stopButton = document.getElementById('stopStream');
-        const transcriptBox = document.getElementById('transcriptBox');
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const transcriptBox = document.getElementById('liveTranscript');
 
-        let transcriber;
+        let micStream;
+        let socket;
 
-        startButton.addEventListener('click', async () => {
+        startBtn.onclick = async () => {
             transcriptBox.value = "";
-            startButton.disabled = true;
-            stopButton.disabled = false;
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
 
-            transcriber = new AmazonTranscribe({
-                region: 'ap-southeast-2',
-                credentials: AWS.config.credentials,
-                languageCode: 'en-US',
-                sampleRate: 44100,
-                streamAudioFromBrowser: true,
-                transcriptionEventHandler: event => {
-                    const results = event.Transcript.Results;
-                    if (results.length > 0 && results[0].Alternatives.length > 0) {
-                        const transcript = results[0].Alternatives[0].Transcript;
-                        if (!results[0].IsPartial) {
-                            transcriptBox.value += transcript + '\n';
-                        }
+            const credentials = await AWS.config.credentials.getPromise();
+
+            const accessKeyId = AWS.config.credentials.accessKeyId;
+            const secretAccessKey = AWS.config.credentials.secretAccessKey;
+            const sessionToken = AWS.config.credentials.sessionToken;
+
+            const region = AWS.config.region;
+
+            const url = await getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region });
+            socket = new WebSocket(url);
+
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                micStream = new MicrophoneStream();
+                micStream.setStream(navigator.mediaDevices.getUserMedia({ video: false, audio: true }));
+
+                micStream.on('data', chunk => {
+                    const raw = MicrophoneStream.toRaw(chunk);
+                    if (raw == null) return;
+                    const encoded = encodePCM(raw);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(encoded);
                     }
-                },
-                errorHandler: err => {
-                    console.error('Transcribe error:', err);
-                    alert('Real-time transcription failed. Check console.');
-                },
-                onConnectionClose: () => {
-                    console.log("Transcribe connection closed.");
+                });
+            };
+
+            socket.onmessage = message => {
+                const messageData = JSON.parse(message.data);
+                const results = messageData.Transcript?.Results;
+                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
+                    const transcript = results[0].Alternatives[0].Transcript;
+                    if (!results[0].IsPartial) {
+                        transcriptBox.value += transcript + " ";
+                    }
                 }
-            });
+            };
 
-            await transcriber.start();
+            socket.onerror = err => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+            };
+        };
+
+        stopBtn.onclick = () => {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (micStream) micStream.stop();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({"action": "StopStream"}));
+            }
+        };
+
+        function encodePCM(raw) {
+            const buffer = new ArrayBuffer(raw.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < raw.length; i++) {
+                const s = Math.max(-1, Math.min(1, raw[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        async function getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region }) {
+            const endpoint = `transcribestreaming.${region}.amazonaws.com:8443`; // default region
+            const protocol = 'wss';
+
+            const url = `${protocol}://${endpoint}/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=16000&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + getDate() + '/' + region + '/transcribe/aws4_request')}&X-Amz-Date=${getDateTime()}&X-Amz-Expires=300&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}&X-Amz-SignedHeaders=host`;
+
+            return url;
+        }
+
+        function getDateTime() {
+            return new Date().toISOString().replace(/[:-]|\..*/g, '') + 'Z';
+        }
+
+        function getDate() {
+            return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        }
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr-Inovates</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="voice-recording">
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
+            <br><br>
+            <audio id="audioPlayer" controls></audio>
+            <h3>Live Transcript:</h3>
+            <textarea id="liveTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+    </footer>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+    <script src="https://unpkg.com/microphone-stream@6.1.0/dist/microphone-stream.min.js"></script>
+
+    <script>
+        AWS.config.region = 'ap-southeast-2';
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
         });
 
-        stopButton.addEventListener('click', async () => {
-            stopButton.disabled = true;
-            startButton.disabled = false;
-            if (transcriber) await transcriber.stop();
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const transcriptBox = document.getElementById('liveTranscript');
+
+        let micStream;
+        let socket;
+
+        startBtn.onclick = async () => {
+            transcriptBox.value = "";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            const credentials = await AWS.config.credentials.getPromise();
+
+            const accessKeyId = AWS.config.credentials.accessKeyId;
+            const secretAccessKey = AWS.config.credentials.secretAccessKey;
+            const sessionToken = AWS.config.credentials.sessionToken;
+
+            const region = AWS.config.region;
+
+            const url = await getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region });
+            socket = new WebSocket(url);
+
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                micStream = new MicrophoneStream();
+                micStream.setStream(navigator.mediaDevices.getUserMedia({ video: false, audio: true }));
+
+                micStream.on('data', chunk => {
+                    const raw = MicrophoneStream.toRaw(chunk);
+                    if (raw == null) return;
+                    const encoded = encodePCM(raw);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(encoded);
+                    }
+                });
+            };
+
+            socket.onmessage = message => {
+                const messageData = JSON.parse(message.data);
+                const results = messageData.Transcript?.Results;
+                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
+                    const transcript = results[0].Alternatives[0].Transcript;
+                    if (!results[0].IsPartial) {
+                        transcriptBox.value += transcript + " ";
+                    }
+                }
+            };
+
+            socket.onerror = err => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+            };
+        };
+
+        stopBtn.onclick = () => {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (micStream) micStream.stop();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({"action": "StopStream"}));
+            }
+        };
+
+        function encodePCM(raw) {
+            const buffer = new ArrayBuffer(raw.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < raw.length; i++) {
+                const s = Math.max(-1, Math.min(1, raw[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        async function getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region }) {
+            const endpoint = `transcribestreaming.${region}.amazonaws.com:8443`; // default region
+            const protocol = 'wss';
+
+            const url = `${protocol}://${endpoint}/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=16000&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + getDate() + '/' + region + '/transcribe/aws4_request')}&X-Amz-Date=${getDateTime()}&X-Amz-Expires=300&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}&X-Amz-SignedHeaders=host`;
+
+            return url;
+        }
+
+        function getDateTime() {
+            return new Date().toISOString().replace(/[:-]|\..*/g, '') + 'Z';
+        }
+
+        function getDate() {
+            return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        }
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr-Inovates</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="voice-recording">
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
+            <br><br>
+            <audio id="audioPlayer" controls></audio>
+            <h3>Live Transcript:</h3>
+            <textarea id="liveTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+    </footer>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+    <script src="https://unpkg.com/microphone-stream@6.1.0/dist/microphone-stream.min.js"></script>
+
+    <script>
+        AWS.config.region = 'ap-southeast-2';
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
         });
+
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const transcriptBox = document.getElementById('liveTranscript');
+
+        let micStream;
+        let socket;
+
+        startBtn.onclick = async () => {
+            transcriptBox.value = "";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            const credentials = await AWS.config.credentials.getPromise();
+
+            const accessKeyId = AWS.config.credentials.accessKeyId;
+            const secretAccessKey = AWS.config.credentials.secretAccessKey;
+            const sessionToken = AWS.config.credentials.sessionToken;
+
+            const region = AWS.config.region;
+
+            const url = await getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region });
+            socket = new WebSocket(url);
+
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                micStream = new MicrophoneStream();
+                micStream.setStream(navigator.mediaDevices.getUserMedia({ video: false, audio: true }));
+
+                micStream.on('data', chunk => {
+                    const raw = MicrophoneStream.toRaw(chunk);
+                    if (raw == null) return;
+                    const encoded = encodePCM(raw);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(encoded);
+                    }
+                });
+            };
+
+            socket.onmessage = message => {
+                const messageData = JSON.parse(message.data);
+                const results = messageData.Transcript?.Results;
+                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
+                    const transcript = results[0].Alternatives[0].Transcript;
+                    if (!results[0].IsPartial) {
+                        transcriptBox.value += transcript + " ";
+                    }
+                }
+            };
+
+            socket.onerror = err => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+            };
+        };
+
+        stopBtn.onclick = () => {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (micStream) micStream.stop();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({"action": "StopStream"}));
+            }
+        };
+
+        function encodePCM(raw) {
+            const buffer = new ArrayBuffer(raw.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < raw.length; i++) {
+                const s = Math.max(-1, Math.min(1, raw[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        async function getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region }) {
+            const endpoint = `transcribestreaming.${region}.amazonaws.com:8443`; // default region
+            const protocol = 'wss';
+
+            const url = `${protocol}://${endpoint}/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=16000&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + getDate() + '/' + region + '/transcribe/aws4_request')}&X-Amz-Date=${getDateTime()}&X-Amz-Expires=300&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}&X-Amz-SignedHeaders=host`;
+
+            return url;
+        }
+
+        function getDateTime() {
+            return new Date().toISOString().replace(/[:-]|\..*/g, '') + 'Z';
+        }
+
+        function getDate() {
+            return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        }
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr-Inovates</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="voice-recording">
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
+            <br><br>
+            <audio id="audioPlayer" controls></audio>
+            <h3>Live Transcript:</h3>
+            <textarea id="liveTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+    </footer>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+    <script src="https://unpkg.com/microphone-stream@6.1.0/dist/microphone-stream.min.js"></script>
+
+    <script>
+        AWS.config.region = 'ap-southeast-2';
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
+        });
+
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const transcriptBox = document.getElementById('liveTranscript');
+
+        let micStream;
+        let socket;
+
+        startBtn.onclick = async () => {
+            transcriptBox.value = "";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            const credentials = await AWS.config.credentials.getPromise();
+
+            const accessKeyId = AWS.config.credentials.accessKeyId;
+            const secretAccessKey = AWS.config.credentials.secretAccessKey;
+            const sessionToken = AWS.config.credentials.sessionToken;
+
+            const region = AWS.config.region;
+
+            const url = await getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region });
+            socket = new WebSocket(url);
+
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                micStream = new MicrophoneStream();
+                micStream.setStream(navigator.mediaDevices.getUserMedia({ video: false, audio: true }));
+
+                micStream.on('data', chunk => {
+                    const raw = MicrophoneStream.toRaw(chunk);
+                    if (raw == null) return;
+                    const encoded = encodePCM(raw);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(encoded);
+                    }
+                });
+            };
+
+            socket.onmessage = message => {
+                const messageData = JSON.parse(message.data);
+                const results = messageData.Transcript?.Results;
+                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
+                    const transcript = results[0].Alternatives[0].Transcript;
+                    if (!results[0].IsPartial) {
+                        transcriptBox.value += transcript + " ";
+                    }
+                }
+            };
+
+            socket.onerror = err => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+            };
+        };
+
+        stopBtn.onclick = () => {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (micStream) micStream.stop();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({"action": "StopStream"}));
+            }
+        };
+
+        function encodePCM(raw) {
+            const buffer = new ArrayBuffer(raw.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < raw.length; i++) {
+                const s = Math.max(-1, Math.min(1, raw[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        async function getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region }) {
+            const endpoint = `transcribestreaming.${region}.amazonaws.com:8443`; // default region
+            const protocol = 'wss';
+
+            const url = `${protocol}://${endpoint}/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=16000&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + getDate() + '/' + region + '/transcribe/aws4_request')}&X-Amz-Date=${getDateTime()}&X-Amz-Expires=300&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}&X-Amz-SignedHeaders=host`;
+
+            return url;
+        }
+
+        function getDateTime() {
+            return new Date().toISOString().replace(/[:-]|\..*/g, '') + 'Z';
+        }
+
+        function getDate() {
+            return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        }
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr-Inovates</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="voice-recording">
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
+            <br><br>
+            <audio id="audioPlayer" controls></audio>
+            <h3>Live Transcript:</h3>
+            <textarea id="liveTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+    </footer>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+    <script src="https://unpkg.com/microphone-stream@6.1.0/dist/microphone-stream.min.js"></script>
+
+    <script>
+        AWS.config.region = 'ap-southeast-2';
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
+        });
+
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const transcriptBox = document.getElementById('liveTranscript');
+
+        let micStream;
+        let socket;
+
+        startBtn.onclick = async () => {
+            transcriptBox.value = "";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            const credentials = await AWS.config.credentials.getPromise();
+
+            const accessKeyId = AWS.config.credentials.accessKeyId;
+            const secretAccessKey = AWS.config.credentials.secretAccessKey;
+            const sessionToken = AWS.config.credentials.sessionToken;
+
+            const region = AWS.config.region;
+
+            const url = await getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region });
+            socket = new WebSocket(url);
+
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                micStream = new MicrophoneStream();
+                micStream.setStream(navigator.mediaDevices.getUserMedia({ video: false, audio: true }));
+
+                micStream.on('data', chunk => {
+                    const raw = MicrophoneStream.toRaw(chunk);
+                    if (raw == null) return;
+                    const encoded = encodePCM(raw);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(encoded);
+                    }
+                });
+            };
+
+            socket.onmessage = message => {
+                const messageData = JSON.parse(message.data);
+                const results = messageData.Transcript?.Results;
+                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
+                    const transcript = results[0].Alternatives[0].Transcript;
+                    if (!results[0].IsPartial) {
+                        transcriptBox.value += transcript + " ";
+                    }
+                }
+            };
+
+            socket.onerror = err => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+            };
+        };
+
+        stopBtn.onclick = () => {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (micStream) micStream.stop();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({"action": "StopStream"}));
+            }
+        };
+
+        function encodePCM(raw) {
+            const buffer = new ArrayBuffer(raw.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < raw.length; i++) {
+                const s = Math.max(-1, Math.min(1, raw[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        async function getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region }) {
+            const endpoint = `transcribestreaming.${region}.amazonaws.com:8443`; // default region
+            const protocol = 'wss';
+
+            const url = `${protocol}://${endpoint}/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=16000&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + getDate() + '/' + region + '/transcribe/aws4_request')}&X-Amz-Date=${getDateTime()}&X-Amz-Expires=300&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}&X-Amz-SignedHeaders=host`;
+
+            return url;
+        }
+
+        function getDateTime() {
+            return new Date().toISOString().replace(/[:-]|\..*/g, '') + 'Z';
+        }
+
+        function getDate() {
+            return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        }
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr-Inovates</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
+        <nav>
+            <ul>
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#services">Services</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="voice-recording">
+            <h2>Voice Recording</h2>
+            <button id="startRecord">Start Recording</button>
+            <button id="stopRecord" disabled>Stop Recording</button>
+            <br><br>
+            <audio id="audioPlayer" controls></audio>
+            <h3>Live Transcript:</h3>
+            <textarea id="liveTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+    </footer>
+
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+    <script src="https://unpkg.com/microphone-stream@6.1.0/dist/microphone-stream.min.js"></script>
+
+    <script>
+        AWS.config.region = 'ap-southeast-2';
+        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
+        });
+
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const transcriptBox = document.getElementById('liveTranscript');
+
+        let micStream;
+        let socket;
+
+        startBtn.onclick = async () => {
+            transcriptBox.value = "";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            const credentials = await AWS.config.credentials.getPromise();
+
+            const accessKeyId = AWS.config.credentials.accessKeyId;
+            const secretAccessKey = AWS.config.credentials.secretAccessKey;
+            const sessionToken = AWS.config.credentials.sessionToken;
+
+            const region = AWS.config.region;
+
+            const url = await getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region });
+            socket = new WebSocket(url);
+
+            socket.binaryType = 'arraybuffer';
+
+            socket.onopen = () => {
+                console.log('WebSocket connected');
+                micStream = new MicrophoneStream();
+                micStream.setStream(navigator.mediaDevices.getUserMedia({ video: false, audio: true }));
+
+                micStream.on('data', chunk => {
+                    const raw = MicrophoneStream.toRaw(chunk);
+                    if (raw == null) return;
+                    const encoded = encodePCM(raw);
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(encoded);
+                    }
+                });
+            };
+
+            socket.onmessage = message => {
+                const messageData = JSON.parse(message.data);
+                const results = messageData.Transcript?.Results;
+                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
+                    const transcript = results[0].Alternatives[0].Transcript;
+                    if (!results[0].IsPartial) {
+                        transcriptBox.value += transcript + " ";
+                    }
+                }
+            };
+
+            socket.onerror = err => {
+                console.error('Socket error:', err);
+            };
+
+            socket.onclose = () => {
+                console.log('WebSocket closed');
+            };
+        };
+
+        stopBtn.onclick = () => {
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            if (micStream) micStream.stop();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({"action": "StopStream"}));
+            }
+        };
+
+        function encodePCM(raw) {
+            const buffer = new ArrayBuffer(raw.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < raw.length; i++) {
+                const s = Math.max(-1, Math.min(1, raw[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        async function getPresignedUrl({ accessKeyId, secretAccessKey, sessionToken, region }) {
+            const endpoint = `transcribestreaming.${region}.amazonaws.com:8443`; // default region
+            const protocol = 'wss';
+
+            const url = `${protocol}://${endpoint}/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=16000&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + getDate() + '/' + region + '/transcribe/aws4_request')}&X-Amz-Date=${getDateTime()}&X-Amz-Expires=300&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}&X-Amz-SignedHeaders=host`;
+
+            return url;
+        }
+
+        function getDateTime() {
+            return new Date().toISOString().replace(/[:-]|\..*/g, '') + 'Z';
+        }
+
+        function getDate() {
+            return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        }
     </script>
 </body>
 </html>
