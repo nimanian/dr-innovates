@@ -31,7 +31,7 @@
 
             <!-- Real-Time Transcript Display -->
             <h3>Real-Time Transcript</h3>
-            <div id="transcriptBox" style="border: 1px solid #ccc; padding: 10px; min-height: 100px;"></div>
+            <textarea id="transcriptBox" rows="6" style="width: 100%; resize: vertical;"></textarea>
         </section>
     </main>
 
@@ -88,12 +88,14 @@
                         recognition.lang = 'en-US';
 
                         recognition.onresult = (event) => {
-                            let transcript = '';
                             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                                transcript += event.results[i][0].transcript;
+                                if (event.results[i].isFinal) {
+                                    transcriptBox.value += event.results[i][0].transcript + ' ';
+                                    transcriptBox.scrollTop = transcriptBox.scrollHeight;
+                                }
                             }
-                            transcriptBox.textContent = transcript;
                         };
+
 
                         recognition.onerror = (event) => {
                             console.error('Speech recognition error:', event.error);
