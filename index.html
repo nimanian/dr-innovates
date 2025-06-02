@@ -97,20 +97,25 @@
                         // 👇 Set language dynamically based on selection
                         const langSelect = document.getElementById('langSelect');
                         recognition.lang = langSelect.value;
-                    
+
+                       
                         recognition.onresult = (event) => {
-                            let interimTranscript = '';
-                            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                                interimTranscript += event.results[i][0].transcript;
-                            }
-                            transcriptBox.value = interimTranscript;
-                            transcriptBox.scrollTop = transcriptBox.scrollHeight;
-                        };
-                    
-                        recognition.onerror = (event) => {
-                            console.error('Speech recognition error:', event.error);
-                        };
-                    
+                            let finalTranscript = '';
+                            
+                            recognition.onresult = (event) => {
+                                let interimTranscript = '';
+                                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                                    if (event.results[i].isFinal) {
+                                        finalTranscript += event.results[i][0].transcript + ' ';
+                                    } else {
+                                        interimTranscript += event.results[i][0].transcript;
+                                    }
+                                }
+                            
+                                transcriptBox.value = finalTranscript + interimTranscript;
+                                transcriptBox.scrollTop = transcriptBox.scrollHeight;
+                            };
+                            
                         recognition.start();
                     }
                      else {
