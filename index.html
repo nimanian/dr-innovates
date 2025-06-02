@@ -40,8 +40,11 @@
       <br><br>
       <audio id="audioPlayer" controls></audio>
 
-      <h3>Real-Time Transcript</h3>
+     <h3>Real-Time Transcript</h3>
       <textarea id="transcriptBox" rows="6" style="width: 100%; resize: vertical;"></textarea>
+      <br>
+      <button id="saveTranscriptBtn">Save Transcript to S3</button>
+      
     </section>
   </main>
 
@@ -158,6 +161,39 @@
         }
       });
     }
+    const saveTranscriptBtn = document.getElementById('saveTranscriptBtn');
+
+    saveTranscriptBtn.addEventListener('click', () => {
+        const transcriptText = transcriptBox.value.trim();
+    
+        if (!transcriptText) {
+            alert("Transcript is empty. Please record and speak before saving.");
+            return;
+        }
+    
+        const blob = new Blob([transcriptText], { type: 'text/plain' });
+    
+        const params = {
+        const params = {
+            Bucket: 'pm-dr-inovates-audio',
+            Key: 'transcripts/latest-transcript.txt',
+            Body: blob,
+            ContentType: 'text/plain',
+        };
+    
+        console.log("Uploading transcript to S3...");
+    
+        s3.upload(params, function(err, data) {
+            if (err) {
+                console.error('Error uploading transcript:', err);
+                alert('Failed to upload transcript to S3.');
+            } else {
+                console.log('Transcript uploaded successfully:', data);
+                alert('Transcript uploaded to S3 successfully!');
+            }
+        });
+    });
+
   </script>
 </body>
 </html>
