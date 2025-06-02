@@ -1,165 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dr-Inovates</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dr-Inovates</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <header>
-        <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;">
-        <nav>
-            <ul>
-                <li><a href="#home">Home</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#services">Services</a></li>
-                <li><a href="#contact">Contact</a></li>
-            </ul>
-        </nav>
-    </header>
+  <header>
+    <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;" />
+    <nav>
+      <ul>
+        <li><a href="#home">Home</a></li>
+        <li><a href="#about">About</a></li>
+        <li><a href="#services">Services</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+  </header>
 
-    <main>
-        <!-- Voice Recording Section -->
-        <section id="voice-recording">
-            <h2>Voice Recording</h2>
-             <label for="langSelect">Choose Language:</label>
-            <select id="langSelect">
-              <option value="en-US">English (US)</option>
-              <option value="fa-IR">Persian (Farsi)</option>
-              <option value="fr-FR">French</option>
-              <option value="de-DE">German</option>
-              <option value="es-ES">Spanish</option>
-            </select>
-            <button id="startRecord">Start Recording</button>
-            <button id="stopRecord" disabled>Stop Recording</button>
-            <button id="playRecord" disabled>Play Recording</button>
-            <br><br>
-            <audio id="audioPlayer" controls></audio>
+  <main>
+    <!-- Voice Recording Section -->
+    <section id="voice-recording">
+      <h2>Voice Recording</h2>
+      <label for="langSelect">Choose Language:</label>
+      <select id="langSelect">
+        <option value="en-US">English (US)</option>
+        <option value="fa-IR">Persian (Farsi)</option>
+        <option value="fr-FR">French</option>
+        <option value="de-DE">German</option>
+        <option value="es-ES">Spanish</option>
+      </select>
 
-            <!-- Real-Time Transcript Display -->
-            <h3>Real-Time Transcript</h3>
-            <textarea id="transcriptBox" rows="6" style="width: 100%; resize: vertical;"></textarea>
-        </section>
-    </main>
+      <br><br>
+      <button id="startRecord">Start Recording</button>
+      <button id="stopRecord" disabled>Stop Recording</button>
+      <button id="playRecord" disabled>Play Recording</button>
 
-    <footer>
-        <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
-    </footer>
+      <br><br>
+      <audio id="audioPlayer" controls></audio>
 
-    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
-    <script>
-        AWS.config.update({
-            region: 'ap-southeast-2',
-            credentials: new AWS.CognitoIdentityCredentials({
-                IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
-            })
-        });
+      <h3>Real-Time Transcript</h3>
+      <textarea id="transcriptBox" rows="6" style="width: 100%; resize: vertical;"></textarea>
+    </section>
+  </main>
 
-        const s3 = new AWS.S3();
-        const startRecordBtn = document.getElementById('startRecord');
-        const stopRecordBtn = document.getElementById('stopRecord');
-        const playRecordBtn = document.getElementById('playRecord');
-        const audioPlayer = document.getElementById('audioPlayer');
-        const transcriptBox = document.getElementById('transcriptBox');
-        let mediaRecorder;
-        let audioChunks = [];
-        let recognition;
+  <footer>
+    <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
+  </footer>
 
-        // Start Recording
-        startRecordBtn.addEventListener('click', () => {
-            audioChunks = [];
+  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
+  <script>
+    AWS.config.update({
+      region: 'ap-southeast-2',
+      credentials: new AWS.CognitoIdentityCredentials({
+        IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
+      })
+    });
 
-            navigator.mediaDevices.getUserMedia({ audio: true })
-                .then(stream => {
-                    mediaRecorder = new MediaRecorder(stream);
-                    mediaRecorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        audioPlayer.src = audioUrl;
-                        uploadAudioToS3(audioBlob);
-                    };
-                    mediaRecorder.start();
+    const s3 = new AWS.S3();
+    const startRecordBtn = document.getElementById('startRecord');
+    const stopRecordBtn = document.getElementById('stopRecord');
+    const playRecordBtn = document.getElementById('playRecord');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const transcriptBox = document.getElementById('transcriptBox');
+    const langSelect = document.getElementById('langSelect');
+    let mediaRecorder;
+    let audioChunks = [];
+    let recognition;
+    let finalTranscript = '';
 
-                    startRecordBtn.disabled = true;
-                    stopRecordBtn.disabled = false;
-                    playRecordBtn.disabled = true;
+    startRecordBtn.addEventListener('click', () => {
+      audioChunks = [];
+      finalTranscript = ''; // reset transcript for new session
+      transcriptBox.value = '';
 
-                   if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-                        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                        recognition = new SpeechRecognition();
-                        recognition.continuous = true;
-                        recognition.interimResults = true;
-                    
-                        // 👇 Set language dynamically based on selection
-                        const langSelect = document.getElementById('langSelect');
-                        recognition.lang = langSelect.value;
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+          };
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            audioPlayer.src = audioUrl;
+            uploadAudioToS3(audioBlob);
+          };
+          mediaRecorder.start();
 
-                       
-                        recognition.onresult = (event) => {
-                            let finalTranscript = '';
-                            
-                            recognition.onresult = (event) => {
-                                let interimTranscript = '';
-                                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                                    if (event.results[i].isFinal) {
-                                        finalTranscript += event.results[i][0].transcript + ' ';
-                                    } else {
-                                        interimTranscript += event.results[i][0].transcript;
-                                    }
-                                }
-                            
-                                transcriptBox.value = finalTranscript + interimTranscript;
-                                transcriptBox.scrollTop = transcriptBox.scrollHeight;
-                            };
-                            
-                        recognition.start();
-                    }
-                     else {
-                        transcriptBox.textContent = "Speech recognition is not supported in this browser.";
-                    }
-                })
-                .catch(error => {
-                    console.error('Error accessing the microphone:', error);
-                });
-        });
+          startRecordBtn.disabled = true;
+          stopRecordBtn.disabled = false;
+          playRecordBtn.disabled = true;
 
-        // Stop Recording
-        stopRecordBtn.addEventListener('click', () => {
-            if (mediaRecorder) mediaRecorder.stop();
-            if (recognition) recognition.stop();
-            startRecordBtn.disabled = false;
-            stopRecordBtn.disabled = true;
-            playRecordBtn.disabled = false;
-        });
+          if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = langSelect.value;
 
-        // Play the Recorded Audio
-        playRecordBtn.addEventListener('click', () => {
-            audioPlayer.play();
-        });
-
-        function uploadAudioToS3(audioBlob) {
-            const params = {
-                Bucket: 'pm-chatgpt-test',
-                Key: 'audio/latest-recording.wav',
-                Body: audioBlob,
-                ContentType: 'audio/wav',
+            recognition.onresult = (event) => {
+              let interimTranscript = '';
+              for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                  finalTranscript += event.results[i][0].transcript + ' ';
+                } else {
+                  interimTranscript += event.results[i][0].transcript;
+                }
+              }
+              transcriptBox.value = finalTranscript + interimTranscript;
+              transcriptBox.scrollTop = transcriptBox.scrollHeight;
             };
 
-            console.log("Uploading to S3...");
+            recognition.onerror = (event) => {
+              console.error('Speech recognition error:', event.error);
+            };
 
-            s3.upload(params, function(err, data) {
-                if (err) {
-                    console.log('Error uploading file:', err);
-                } else {
-                    console.log('File uploaded successfully:', data);
-                    alert('Audio uploaded to S3 successfully!');
-                }
-            });
+            recognition.start();
+          } else {
+            transcriptBox.value = "Speech recognition is not supported in this browser.";
+          }
+        })
+        .catch(error => {
+          console.error('Error accessing the microphone:', error);
+        });
+    });
+
+    stopRecordBtn.addEventListener('click', () => {
+      if (mediaRecorder) mediaRecorder.stop();
+      if (recognition) recognition.stop();
+      startRecordBtn.disabled = false;
+      stopRecordBtn.disabled = true;
+      playRecordBtn.disabled = false;
+    });
+
+    playRecordBtn.addEventListener('click', () => {
+      audioPlayer.play();
+    });
+
+    function uploadAudioToS3(audioBlob) {
+      const params = {
+        Bucket: 'pm-chatgpt-test',
+        Key: 'audio/latest-recording.wav',
+        Body: audioBlob,
+        ContentType: 'audio/wav',
+      };
+
+      console.log("Uploading to S3...");
+
+      s3.upload(params, function (err, data) {
+        if (err) {
+          console.log('Error uploading file:', err);
+        } else {
+          console.log('File uploaded successfully:', data);
+          alert('Audio uploaded to S3 successfully!');
         }
-    </script>
+      });
+    }
+  </script>
 </body>
 </html>
