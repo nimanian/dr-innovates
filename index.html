@@ -20,6 +20,34 @@
     </header>
 
     <main>
+        <section id="home">
+            <h1>Welcome to Dr-Inovates</h1>
+            <p>Your trusted partner in innovative medical solutions.</p>
+        </section>
+
+        <section id="about">
+            <h2>About Dr-Inovates</h2>
+            <p>Learn more about the doctor and the mission of Dr-Inovates.</p>
+        </section>
+
+        <section id="services">
+            <h2>Our Services</h2>
+            <p>Discover the services we offer to enhance your medical experience.</p>
+        </section>
+
+        <section id="contact">
+            <h2>Contact Us</h2>
+            <form>
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email">
+                <textarea name="message" id="message" rows="4" placeholder="Your message"></textarea>
+                <button type="submit">Send Message</button>
+            </form>
+        </section>
+
+        <!-- Voice Recording Section -->
         <section id="voice-recording">
             <h2>Voice Recording</h2>
             <button id="startRecord">Start Recording</button>
@@ -27,10 +55,10 @@
             <button id="playRecord" disabled>Play Recording</button>
             <br><br>
             <audio id="audioPlayer" controls></audio>
-            <div>
-                <h3>Real-Time Transcript</h3>
-                <textarea id="realTimeTranscript" rows="8" cols="80" readonly placeholder="Real-time transcript will appear here..."></textarea>
-            </div>
+
+            <!-- Real-Time Transcript Display -->
+            <h3>Real-Time Transcript</h3>
+            <div id="transcriptBox" style="border: 1px solid #ccc; padding: 10px; min-height: 100px;"></div>
         </section>
     </main>
 
@@ -40,9 +68,11 @@
 
     <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
     <script>
-        AWS.config.region = 'ap-southeast-2';
-        AWS.config.credentials = new AWS.CognitoIdentityCredentials({
-            IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
+        AWS.config.update({
+            region: 'ap-southeast-2',
+            credentials: new AWS.CognitoIdentityCredentials({
+                IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
+            })
         });
 
         const s3 = new AWS.S3();
@@ -50,39 +80,75 @@
         const stopRecordBtn = document.getElementById('stopRecord');
         const playRecordBtn = document.getElementById('playRecord');
         const audioPlayer = document.getElementById('audioPlayer');
-        const transcriptBox = document.getElementById('realTimeTranscript');
-        let mediaRecorder, audioChunks = [], stream;
-        let transcribeSocket;
+        const transcriptBox = document.getElementById('transcriptBox');
+        let mediaRecorder;
+        let audioChunks = [];
+        let recognition;
 
-        startRecordBtn.addEventListener('click', async () => {
+        // Start Recording
+        startRecordBtn.addEventListener('click', () => {
             audioChunks = [];
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
 
-            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-            mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                audioPlayer.src = URL.createObjectURL(audioBlob);
-                uploadAudioToS3(audioBlob);
-                stopTranscription();
-            };
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        audioPlayer.src = audioUrl;
+                        uploadAudioToS3(audioBlob);
+                    };
+                    mediaRecorder.start();
 
-            startTranscription(stream);
-            mediaRecorder.start();
-            startRecordBtn.disabled = true;
-            stopRecordBtn.disabled = false;
-            playRecordBtn.disabled = true;
+                    startRecordBtn.disabled = true;
+                    stopRecordBtn.disabled = false;
+                    playRecordBtn.disabled = true;
+
+                    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+                        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                        recognition = new SpeechRecognition();
+                        recognition.continuous = true;
+                        recognition.interimResults = true;
+                        recognition.lang = 'en-US';
+
+                        recognition.onresult = (event) => {
+                            let transcript = '';
+                            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                                transcript += event.results[i][0].transcript;
+                            }
+                            transcriptBox.textContent = transcript;
+                        };
+
+                        recognition.onerror = (event) => {
+                            console.error('Speech recognition error:', event.error);
+                        };
+
+                        recognition.start();
+                    } else {
+                        transcriptBox.textContent = "Speech recognition is not supported in this browser.";
+                    }
+                })
+                .catch(error => {
+                    console.error('Error accessing the microphone:', error);
+                });
         });
 
+        // Stop Recording
         stopRecordBtn.addEventListener('click', () => {
-            mediaRecorder.stop();
-            stream.getTracks().forEach(track => track.stop());
+            if (mediaRecorder) mediaRecorder.stop();
+            if (recognition) recognition.stop();
             startRecordBtn.disabled = false;
             stopRecordBtn.disabled = true;
             playRecordBtn.disabled = false;
         });
 
-        playRecordBtn.addEventListener('click', () => audioPlayer.play());
+        // Play the Recorded Audio
+        playRecordBtn.addEventListener('click', () => {
+            audioPlayer.play();
+        });
 
         function uploadAudioToS3(audioBlob) {
             const params = {
@@ -92,54 +158,16 @@
                 ContentType: 'audio/wav',
             };
 
+            console.log("Uploading to S3...");
+
             s3.upload(params, function(err, data) {
-                if (err) console.log('Error uploading:', err);
-                else console.log('Uploaded:', data);
-            });
-        }
-
-        async function startTranscription(stream) {
-            const credentials = await AWS.config.credentials.getPromise();
-            const accessKeyId = AWS.config.credentials.accessKeyId;
-            const secretAccessKey = AWS.config.credentials.secretAccessKey;
-            const sessionToken = AWS.config.credentials.sessionToken;
-
-            const endpoint = `wss://transcribestreaming.${AWS.config.region}.amazonaws.com:8443/stream-transcription-websocket?language-code=en-US&media-encoding=pcm&sample-rate=44100&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=${encodeURIComponent(accessKeyId + '/' + AWS.util.date.iso8601(new Date()).substring(0, 10) + '/' + AWS.config.region + '/transcribe/aws4_request')}&X-Amz-Date=${AWS.util.date.iso8601(new Date()).replace(/[:-]|\.\d{3}/g, '')}&X-Amz-Security-Token=${encodeURIComponent(sessionToken)}`;
-
-            transcribeSocket = new WebSocket(endpoint);
-            transcribeSocket.binaryType = 'arraybuffer';
-            transcribeSocket.onopen = () => {
-                const audioCtx = new AudioContext();
-                const input = audioCtx.createMediaStreamSource(stream);
-                const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-                processor.onaudioprocess = e => {
-                    const inputData = e.inputBuffer.getChannelData(0);
-                    const pcmEncoded = new Int16Array(inputData.length);
-                    for (let i = 0; i < inputData.length; i++) {
-                        pcmEncoded[i] = inputData[i] * 32767;
-                    }
-                    transcribeSocket.send(pcmEncoded.buffer);
-                };
-                input.connect(processor);
-                processor.connect(audioCtx.destination);
-            };
-
-            transcribeSocket.onmessage = event => {
-                const message = JSON.parse(new TextDecoder('utf-8').decode(event.data));
-                const results = message.Transcript.Results;
-                if (results && results.length > 0 && results[0].Alternatives.length > 0) {
-                    const transcript = results[0].Alternatives[0].Transcript;
-                    if (!results[0].IsPartial) {
-                        transcriptBox.value += transcript + '\n';
-                    }
+                if (err) {
+                    console.log('Error uploading file:', err);
+                } else {
+                    console.log('File uploaded successfully:', data);
+                    alert('Audio uploaded to S3 successfully!');
                 }
-            };
-        }
-
-        function stopTranscription() {
-            if (transcribeSocket && transcribeSocket.readyState === WebSocket.OPEN) {
-                transcribeSocket.close();
-            }
+            });
         }
     </script>
 </body>
