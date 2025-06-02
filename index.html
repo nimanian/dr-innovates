@@ -23,6 +23,14 @@
         <!-- Voice Recording Section -->
         <section id="voice-recording">
             <h2>Voice Recording</h2>
+             <label for="langSelect">Choose Language:</label>
+            <select id="langSelect">
+              <option value="en-US">English (US)</option>
+              <option value="fa-IR">Persian (Farsi)</option>
+              <option value="fr-FR">French</option>
+              <option value="de-DE">German</option>
+              <option value="es-ES">Spanish</option>
+            </select>
             <button id="startRecord">Start Recording</button>
             <button id="stopRecord" disabled>Stop Recording</button>
             <button id="playRecord" disabled>Play Recording</button>
@@ -80,30 +88,32 @@
                     stopRecordBtn.disabled = false;
                     playRecordBtn.disabled = true;
 
-                    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+                   if (window.SpeechRecognition || window.webkitSpeechRecognition) {
                         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                         recognition = new SpeechRecognition();
                         recognition.continuous = true;
                         recognition.interimResults = true;
-                        recognition.lang = 'en-US';
-
-                        
+                    
+                        // 👇 Set language dynamically based on selection
+                        const langSelect = document.getElementById('langSelect');
+                        recognition.lang = langSelect.value;
+                    
                         recognition.onresult = (event) => {
                             let interimTranscript = '';
                             for (let i = event.resultIndex; i < event.results.length; ++i) {
                                 interimTranscript += event.results[i][0].transcript;
                             }
                             transcriptBox.value = interimTranscript;
+                            transcriptBox.scrollTop = transcriptBox.scrollHeight;
                         };
-                        
-
-
+                    
                         recognition.onerror = (event) => {
                             console.error('Speech recognition error:', event.error);
                         };
-
+                    
                         recognition.start();
-                    } else {
+                    }
+                     else {
                         transcriptBox.textContent = "Speech recognition is not supported in this browser.";
                     }
                 })
