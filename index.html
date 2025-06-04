@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Dr-Inovates - Transcription</title>
@@ -286,25 +287,28 @@ ${transcript}
       }
     });
 
-    downloadBtn.addEventListener('click', () => {
-      const blob = new Blob([latestSummary], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `clinical-summary-${Date.now()}.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+   downloadBtn.addEventListener('click', async () => {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      // Split text to fit page width
+      const lines = doc.splitTextToSize(latestSummary, 180);
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(11);
+      doc.text(lines, 10, 20);
+    
+      doc.save(`clinical-summary-${Date.now()}.pdf`);
     });
 
-    printBtn.addEventListener('click', () => {
+  printBtn.addEventListener('click', () => {
       const printWindow = window.open('', '_blank');
-      printWindow.document.write(`<pre>${latestSummary}</pre>`);
+      const cleanContent = latestSummary.replace(/\n/g, '<br>').replace(/\[Not provided\]/g, '<span style="background:#fff3cd;color:#856404;font-weight:bold;">[Not provided]</span>');
+      printWindow.document.write(`<html><head><title>Print Summary</title></head><body style="font-family:monospace;padding:20px;">${cleanContent}</body></html>`);
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
-      printWindow.close();
     });
+
   </script>
 </body>
 </html>
