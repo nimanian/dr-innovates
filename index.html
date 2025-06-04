@@ -3,80 +3,104 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Dr-Inovates</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Dr-Inovates - Transcription</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      padding: 30px;
+      max-width: 960px;
+      margin: auto;
+    }
+    section {
+      background: #fff;
+      padding: 25px;
+      margin-bottom: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    h2 { margin-bottom: 15px; color: #2c3e50; }
+    button {
+      padding: 10px 16px;
+      margin: 6px 4px;
+      font-size: 15px;
+      border-radius: 6px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+      background-color: #0056b3;
+    }
+    textarea {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: monospace;
+      resize: vertical;
+    }
+    audio { width: 100%; margin-top: 10px; }
+    #chat-box {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 10px;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #fafafa;
+    }
+    .message { margin: 10px 0; }
+    .message.user { text-align: right; color: #007bff; }
+    .message.bot { text-align: left; color: #333; }
+  </style>
 </head>
 <body>
-  <header>
-    <img src="pic1.jpeg" alt="Dr-Inovates Logo" style="width: 100%; height: auto;" />
-    <nav>
-      <ul>
-        <li><a href="#home">Home</a></li>
-        <li><a href="#about">About</a></li>
-        <li><a href="#services">Services</a></li>
-        <li><a href="#contact">Contact</a></li>
-      </ul>
-    </nav>
-  </header>
 
-  <main>
-    <!-- Voice Recording Section -->
-    <section id="voice-recording">
-      <h2>Voice Recording</h2>
-      <label for="langSelect">Choose Language:</label>
-      <select id="langSelect">
-        <option value="en-US">English (US)</option>
-        <option value="fa-IR">Persian (Farsi)</option>
-        <option value="fr-FR">French</option>
-        <option value="de-DE">German</option>
-        <option value="es-ES">Spanish</option>
-      </select>
+  <section>
+    <h2>Record & Transcribe</h2>
+    <label for="langSelect">Language:</label>
+    <select id="langSelect">
+      <option value="en-US">English (US)</option>
+      <option value="fa-IR">Persian</option>
+      <option value="fr-FR">French</option>
+      <option value="de-DE">German</option>
+      <option value="es-ES">Spanish</option>
+    </select><br><br>
 
-      <br><br>
-      <button id="startRecord">Start Recording</button>
-      <button id="stopRecord" disabled>Stop Recording</button>
-      <button id="playRecord" disabled>Play Recording</button>
+    <button id="startRecord">Start Recording</button>
+    <button id="stopRecord" disabled>Stop Recording</button>
+    <button id="playRecord" disabled>Play Recording</button><br><br>
 
-      <br><br>
-      <audio id="audioPlayer" controls></audio>
+    <audio id="audioPlayer" controls></audio>
 
-      <h3>Real-Time Transcript</h3>
-      <textarea id="transcriptBox" rows="6" style="width: 100%; resize: vertical;"></textarea>
-      <br>
-      <button id="saveTranscriptBtn">Save Transcript to S3</button>
-      <button id="summarizeBtn">Summarize Transcript</button>
-    </section>
+    <h3>Transcript</h3>
+    <textarea id="transcriptBox" rows="6"></textarea>
+    <br>
+    <button id="summarizeBtn">Summarize Transcript</button>
+  </section>
 
-    <!-- ChatBot Output Section -->
-    <section id="chat">
-      <h2>Dr-Inovates Chatbot</h2>
-      <div id="chat-box" style="border: 1px solid #ccc; padding: 10px; max-height: 300px; overflow-y: auto;">
-        <div class="message bot"><strong>Bot:</strong> Hello! How can I assist you today?</div>
-      </div>
-    </section>
-  </main>
+  <section>
+    <h2>Clinical Summary</h2>
+    <div id="chat-box">
+      <div class="message bot"><strong>Bot:</strong> Ready to generate a clinical note summary.</div>
+    </div>
+  </section>
 
-  <footer>
-    <p>&copy; 2025 Dr-Inovates. All rights reserved.</p>
-  </footer>
-
-  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.947.0.min.js"></script>
   <script>
-    AWS.config.update({
-      region: 'ap-southeast-2',
-      credentials: new AWS.CognitoIdentityCredentials({
-        IdentityPoolId: 'ap-southeast-2:e1961e14-083d-4200-bb2b-c869a5ffbc3d'
-      })
-    });
-
-    const s3 = new AWS.S3();
     const startRecordBtn = document.getElementById('startRecord');
     const stopRecordBtn = document.getElementById('stopRecord');
     const playRecordBtn = document.getElementById('playRecord');
     const audioPlayer = document.getElementById('audioPlayer');
     const transcriptBox = document.getElementById('transcriptBox');
     const langSelect = document.getElementById('langSelect');
-    const saveTranscriptBtn = document.getElementById('saveTranscriptBtn');
     const summarizeBtn = document.getElementById('summarizeBtn');
     const chatBox = document.getElementById('chat-box');
 
@@ -93,14 +117,11 @@
       navigator.mediaDevices.getUserMedia({ audio: true })
         .then(stream => {
           mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.ondataavailable = event => {
-            audioChunks.push(event.data);
-          };
+          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
           mediaRecorder.onstop = () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
             const audioUrl = URL.createObjectURL(audioBlob);
             audioPlayer.src = audioUrl;
-            uploadAudioToS3(audioBlob);
           };
           mediaRecorder.start();
 
@@ -108,39 +129,30 @@
           stopRecordBtn.disabled = false;
           playRecordBtn.disabled = true;
 
-          if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (SpeechRecognition) {
             recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = langSelect.value;
 
-            recognition.onresult = (event) => {
-              let interimTranscript = '';
+            recognition.onresult = event => {
+              let interim = '';
               for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
                   finalTranscript += event.results[i][0].transcript + ' ';
                 } else {
-                  interimTranscript += event.results[i][0].transcript;
+                  interim += event.results[i][0].transcript;
                 }
               }
-              transcriptBox.value = finalTranscript + interimTranscript;
+              transcriptBox.value = finalTranscript + interim;
               transcriptBox.scrollTop = transcriptBox.scrollHeight;
             };
-
-            recognition.onerror = (event) => {
-              console.error('Speech recognition error:', event.error);
-            };
-
             recognition.start();
           } else {
-            transcriptBox.value = "Speech recognition is not supported in this browser.";
+            transcriptBox.value = "Speech recognition not supported.";
           }
-        })
-        .catch(error => {
-          console.error('Error accessing the microphone:', error);
-          alert("Microphone access error: " + error.message);
-        });
+        }).catch(err => alert("Microphone error: " + err.message));
     });
 
     stopRecordBtn.addEventListener('click', () => {
@@ -151,153 +163,97 @@
       playRecordBtn.disabled = false;
     });
 
-    playRecordBtn.addEventListener('click', () => {
-      audioPlayer.play();
-    });
-
-    function uploadAudioToS3(audioBlob) {
-      const params = {
-        Bucket: 'pm-dr-inovates-audio',
-        Key: 'audio/latest-recording.wav',
-        Body: audioBlob,
-        ContentType: 'audio/wav',
-      };
-
-      s3.upload(params, function (err, data) {
-        if (err) {
-          console.error('Error uploading audio:', err);
-          alert('Failed to upload audio to S3.');
-        } else {
-          alert('Audio uploaded to S3 successfully!');
-        }
-      });
-    }
-
-    saveTranscriptBtn.addEventListener('click', () => {
-      const transcriptText = transcriptBox.value.trim();
-      if (!transcriptText) {
-        alert("Transcript is empty. Please record and speak before saving.");
-        return;
-      }
-
-      const blob = new Blob([transcriptText], { type: 'text/plain' });
-
-      const params = {
-        Bucket: 'pm-dr-inovates-audio',
-        Key: 'transcripts/latest-transcript.txt',
-        Body: blob,
-        ContentType: 'text/plain',
-      };
-
-      s3.upload(params, function(err, data) {
-        if (err) {
-          console.error('Error uploading transcript:', err);
-          alert('Failed to upload transcript to S3.');
-        } else {
-          alert('Transcript uploaded to S3 successfully!');
-        }
-      });
-    });
-
+    playRecordBtn.addEventListener('click', () => audioPlayer.play());
 
     summarizeBtn.addEventListener('click', async () => {
       const transcript = transcriptBox.value.trim();
-      if (!transcript) {
-        alert("Transcript is empty.");
-        return;
-      }
-    
+      if (!transcript) return alert("Transcript is empty.");
+
+      chatBox.innerHTML += `<div class="message user"><strong>You:</strong> Please summarize this transcript.</div>`;
+
       const prompt = `
-    Based on the following medical conversation, extract the relevant information and summarize it using the provided clinical note template. Fill in each section as accurately as possible. If some details are missing, use "[Not provided]" or leave the field as-is.
-    
-    --- TEMPLATE ---
-    
-    ===========================
-         PATIENT HISTORY
-    ===========================
-    
-    Patient Name     : [Not provided]  
-    DOB              : [Not provided]  
-    Gender           : [Not provided]  
-    Date of Visit    : ${new Date().toLocaleDateString('en-AU')}  
-    Patient ID       : [Generated by system]
-    
-    ---------------------------------------
-    1. Chief Complaint (CC)
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    2. History of Present Illness (HPI)
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    3. Past Medical History (PMH)
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    4. Current Medications
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    5. Allergies
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    6. Family History (FH)
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    7. Social History (SH)
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    8. Review of Systems (ROS)
-    ---------------------------------------
-    [Fill in based on conversation]
-    
-    ---------------------------------------
-    9. Vital Signs
-    ---------------------------------------
-    (To be completed by nurse or measured at intake)
-    
-    ---------------------------------------
-    10. Clinical Impression / Notes
-    ---------------------------------------
-    [Clinical interpretation and recommendations]
-    
-    Physician: Dr. [Name]  
-    Signature: _______________________  
-    Date: ${new Date().toLocaleDateString('en-AU')}
-    
-    --- CONVERSATION ---
-    
-    ${transcript}
-    `;
-    
-      chatBox.innerHTML += `<div class="message user"><strong>You:</strong> Please summarize the patient conversation in a medical note format.</div>`;
-      chatBox.scrollTop = chatBox.scrollHeight;
-    
+Summarize the following patient-doctor conversation into this clinical note template:
+
+===========================
+     PATIENT HISTORY
+===========================
+
+Patient Name     : [Not provided]  
+DOB              : [Not provided]  
+Gender           : [Not provided]  
+Date of Visit    : ${new Date().toLocaleDateString('en-AU')}  
+Patient ID       : [Generated by system]
+
+---------------------------------------
+1. Chief Complaint (CC)
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+2. History of Present Illness (HPI)
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+3. Past Medical History (PMH)
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+4. Current Medications
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+5. Allergies
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+6. Family History (FH)
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+7. Social History (SH)
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+8. Review of Systems (ROS)
+---------------------------------------
+[From transcript]
+
+---------------------------------------
+9. Vital Signs
+---------------------------------------
+(To be completed at intake)
+
+---------------------------------------
+10. Clinical Impression / Notes
+---------------------------------------
+[Summary + recommendations]
+
+Physician: Dr. [Name]  
+Signature: _______________________  
+Date: ${new Date().toLocaleDateString('en-AU')}
+
+--- Transcript ---
+${transcript}
+`;
+
       try {
         const response = await fetch('https://a8lhx0zjp9.execute-api.ap-southeast-2.amazonaws.com/dev/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt })
         });
-    
         const data = await response.json();
         chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong><pre>${data.response}</pre></div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
-    
-      } catch (error) {
-        console.error('Summarization error:', error);
-        chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong> Sorry, failed to summarize the transcript.</div>`;
+      } catch (err) {
+        console.error(err);
+        chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong> Summarization failed.</div>`;
       }
     });
   </script>
