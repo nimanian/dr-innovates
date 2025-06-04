@@ -59,6 +59,11 @@
     }
     .message { margin: 10px 0; }
     .message.bot { text-align: left; color: #333; }
+    .highlight {
+      background-color: #fff3cd;
+      color: #856404;
+      font-weight: bold;
+    }
     #spinner {
       display: none;
       text-align: center;
@@ -97,6 +102,9 @@
     <h2>Clinical Summary</h2>
     <div id="chat-box"></div>
     <div id="spinner"><em>Generating summary...</em></div>
+    <br>
+    <button id="downloadSummaryBtn" style="display:none;">Download Summary</button>
+    <button id="printSummaryBtn" style="display:none;">Print Summary</button>
   </section>
 
   <script>
@@ -109,11 +117,14 @@
     const summarizeBtn = document.getElementById('summarizeBtn');
     const chatBox = document.getElementById('chat-box');
     const spinner = document.getElementById('spinner');
+    const downloadBtn = document.getElementById('downloadSummaryBtn');
+    const printBtn = document.getElementById('printSummaryBtn');
 
     let mediaRecorder;
     let audioChunks = [];
     let recognition;
     let finalTranscript = '';
+    let latestSummary = '';
 
     startRecordBtn.addEventListener('click', () => {
       audioChunks = [];
@@ -176,6 +187,8 @@
       if (!transcript) return alert("Transcript is empty.");
 
       spinner.style.display = 'block';
+      downloadBtn.style.display = 'none';
+      printBtn.style.display = 'none';
 
       const prompt = `
 Summarize the following patient-doctor conversation into this clinical note template:
@@ -256,14 +269,41 @@ ${transcript}
         });
 
         const data = await response.json();
-        chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong><pre>${data.response}</pre></div>`;
+        latestSummary = data.response;
+
+        const highlighted = latestSummary.replace(/\[Not provided\]/g, '<span class="highlight">[Not provided]</span>');
+
+        chatBox.innerHTML = `<div class="message bot"><strong>Bot:</strong><pre>${highlighted}</pre></div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
+
+        downloadBtn.style.display = 'inline-block';
+        printBtn.style.display = 'inline-block';
       } catch (err) {
         console.error(err);
-        chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong> Summarization failed.</div>`;
+        chatBox.innerHTML = `<div class="message bot"><strong>Bot:</strong> Summarization failed.</div>`;
       } finally {
         spinner.style.display = 'none';
       }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const blob = new Blob([latestSummary], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `clinical-summary-${Date.now()}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    printBtn.addEventListener('click', () => {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`<pre>${latestSummary}</pre>`);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
     });
   </script>
 </body>
