@@ -90,7 +90,7 @@
   <section>
     <h2>Clinical Summary</h2>
     <div id="chat-box">
-      <div class="message bot"><strong>Bot:</strong> Ready to generate a clinical note summary.</div>
+      
     </div>
   </section>
 
@@ -169,7 +169,7 @@
       const transcript = transcriptBox.value.trim();
       if (!transcript) return alert("Transcript is empty.");
 
-      chatBox.innerHTML += `<div class="message user"><strong>You:</strong> Please summarize this transcript.</div>`;
+     
 
       const prompt = `
 Summarize the following patient-doctor conversation into this clinical note template:
