@@ -58,8 +58,14 @@
       background: #fafafa;
     }
     .message { margin: 10px 0; }
-    .message.user { text-align: right; color: #007bff; }
     .message.bot { text-align: left; color: #333; }
+    #spinner {
+      display: none;
+      text-align: center;
+      margin-top: 10px;
+      font-style: italic;
+      color: #555;
+    }
   </style>
 </head>
 <body>
@@ -89,9 +95,8 @@
 
   <section>
     <h2>Clinical Summary</h2>
-    <div id="chat-box">
-      
-    </div>
+    <div id="chat-box"></div>
+    <div id="spinner"><em>Generating summary...</em></div>
   </section>
 
   <script>
@@ -103,6 +108,7 @@
     const langSelect = document.getElementById('langSelect');
     const summarizeBtn = document.getElementById('summarizeBtn');
     const chatBox = document.getElementById('chat-box');
+    const spinner = document.getElementById('spinner');
 
     let mediaRecorder;
     let audioChunks = [];
@@ -169,7 +175,7 @@
       const transcript = transcriptBox.value.trim();
       if (!transcript) return alert("Transcript is empty.");
 
-     
+      spinner.style.display = 'block';
 
       const prompt = `
 Summarize the following patient-doctor conversation into this clinical note template:
@@ -248,12 +254,15 @@ ${transcript}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt })
         });
+
         const data = await response.json();
         chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong><pre>${data.response}</pre></div>`;
         chatBox.scrollTop = chatBox.scrollHeight;
       } catch (err) {
         console.error(err);
         chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong> Summarization failed.</div>`;
+      } finally {
+        spinner.style.display = 'none';
       }
     });
   </script>
