@@ -1,96 +1,148 @@
-/* Reset default margin and padding */
+/* RESET + BASE */
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    color: #333;
-    text-align: center;
-    line-height: 1.6;
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  background-color: #f4f6f8;
+  color: #333;
+  line-height: 1.6;
+  padding-bottom: 120px; /* Extra room for fixed footer */
 }
 
+/* HEADER + NAVIGATION */
 header {
-    background-color: #333;
-    color: #fff;
-    padding: 20px;
+  background-color: #2c3e50;
+  color: #fff;
+  padding: 20px 0;
+  text-align: center;
 }
 
 nav ul {
-    list-style: none;
-    padding: 10px 0;
+  list-style: none;
+  padding: 10px 0;
 }
 
 nav ul li {
-    display: inline;
-    margin: 0 15px;
+  display: inline-block;
+  margin: 0 15px;
 }
 
 nav ul li a {
-    color: #fff;
-    text-decoration: none;
-    font-size: 18px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 18px;
 }
 
+nav ul li a:hover {
+  text-decoration: underline;
+}
+
+/* MAIN + SECTIONS */
 main {
-    padding: 20px;
-    padding-bottom: 100px; /* Prevent footer overlap */
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 30px 20px;
 }
 
 section {
-    margin-bottom: 40px;
+  background: #fff;
+  padding: 25px;
+  margin-bottom: 30px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  text-align: left;
 }
 
-/* Headings */
+/* HEADINGS */
 h1, h2 {
-    color: #333;
-    margin-bottom: 15px;
+  color: #2c3e50;
+  margin-bottom: 15px;
 }
 
-/* Transcript Section Styling */
-#transcript-display {
-    background-color: #e0f7fa;
-    padding: 20px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    max-width: 800px;
-    margin: 0 auto;
+/* BUTTONS */
+button {
+  padding: 10px 16px;
+  margin: 6px 4px;
+  font-size: 15px;
+  border-radius: 6px;
+  border: none;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
 
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+/* TEXTAREA */
+textarea {
+  width: 100%;
+  font-size: 15px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #f9f9f9;
+  resize: vertical;
+  font-family: monospace;
+  margin-top: 10px;
+}
+
+/* AUDIO PLAYER */
+audio {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* TRANSCRIPT DISPLAY SECTION */
+#transcript-display,
 #transcriptBox {
-    width: 100%;
-    padding: 10px;
-    font-size: 16px;
-    resize: none;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    margin-bottom: 10px;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
-#fetchTranscript {
-    padding: 10px 20px;
-    background-color: #00796b;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    font-size: 16px;
-    cursor: pointer;
+/* CHAT BOX */
+#chat-box {
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #fafafa;
 }
 
-#fetchTranscript:hover {
-    background-color: #004d40;
+.message {
+  margin: 10px 0;
 }
 
-/* Footer stays at bottom without covering content */
+.message.user {
+  text-align: right;
+  color: #007bff;
+}
+
+.message.bot {
+  text-align: left;
+  color: #333;
+}
+
+/* FOOTER */
 footer {
-    background-color: #333;
-    color: white;
-    padding: 15px;
-    text-align: center;
-    position: fixed;
-    width: 100%;
-    bottom: 0;
+  background-color: #2c3e50;
+  color: white;
+  padding: 15px;
+  text-align: center;
+  position: fixed;
+  width: 100%;
+  bottom: 0;
+  font-size: 14px;
 }
