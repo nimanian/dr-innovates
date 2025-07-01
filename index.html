@@ -326,14 +326,51 @@
       doc.save(`clinical-summary-${Date.now()}.pdf`);
     });
 
-  printBtn.addEventListener('click', () => {
-      const printWindow = window.open('', '_blank');
-      const cleanContent = latestSummary.replace(/\n/g, '<br>').replace(/\[Not provided\]/g, '<span style="background:#fff3cd;color:#856404;font-weight:bold;">[Not provided]</span>');
-      printWindow.document.write(`<html><head><title>Print Summary</title></head><body style="font-family:monospace;padding:20px;">${cleanContent}</body></html>`);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-    });
+    printBtn.addEventListener('click', () => {
+        const printWindow = window.open('', '_blank');
+        const cleanContent = latestSummary.replace(/\n/g, '<br>').replace(/\[Not provided\]/g, '<span style="background:#fff3cd;color:#856404;font-weight:bold;">[Not provided]</span>');
+        printWindow.document.write(`<html><head><title>Print Summary</title></head><body style="font-family:monospace;padding:20px;">${cleanContent}</body></html>`);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      });
+     // Add the chatbot-related script below the existing one
+      const askQuestionBtn = document.getElementById('askQuestionBtn');
+      const userInput = document.getElementById('user-input');
+      const chatBox = document.getElementById('chat-box');
+      const spinner = document.getElementById('spinner');
+  
+      askQuestionBtn.addEventListener('click', async () => {
+        const question = userInput.value.trim();
+        if (!question) return alert("Please enter a question.");
+  
+        // Show loading spinner
+        spinner.style.display = 'block';
+        chatBox.innerHTML += `<div class="message user">You: ${question}</div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+  
+        try {
+          // Send the question to the API for retrieval and generation
+          const response = await fetch('https://your-api-endpoint.com/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+          });
+  
+          const data = await response.json();
+          const answer = data.response;
+  
+          // Display the answer in the chatbox
+          chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong><pre>${answer}</pre></div>`;
+          chatBox.scrollTop = chatBox.scrollHeight;
+  
+        } catch (err) {
+          console.error(err);
+          chatBox.innerHTML += `<div class="message bot"><strong>Bot:</strong> Sorry, something went wrong.</div>`;
+        } finally {
+          spinner.style.display = 'none'; // Hide the spinner once done
+        }
+      });
 
   </script>
 </body>
