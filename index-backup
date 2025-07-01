@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dr-Inovates - Transcription</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      padding: 30px;
+      max-width: 960px;
+      margin: auto;
+    }
+    section {
+      background: #fff;
+      padding: 25px;
+      margin-bottom: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    h2 { margin-bottom: 15px; color: #2c3e50; }
+    button {
+      padding: 10px 16px;
+      margin: 6px 4px;
+      font-size: 15px;
+      border-radius: 6px;
+      border: none;
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+      background-color: #0056b3;
+    }
+    textarea {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: monospace;
+      resize: vertical;
+    }
+    audio { width: 100%; margin-top: 10px; }
+    #chat-box {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 10px;
+      max-height: 300px;
+      overflow-y: auto;
+      background: #fafafa;
+    }
+    .message { margin: 10px 0; }
+    .message.bot { text-align: left; color: #333; }
+    .highlight {
+      background-color: #fff3cd;
+      color: #856404;
+      font-weight: bold;
+    }
+    #spinner {
+      display: none;
+      text-align: center;
+      margin-top: 10px;
+      font-style: italic;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <section>
+    <h2>Record & Transcribe</h2>
+    <label for="langSelect">Language:</label>
+    <select id="langSelect">
+      <option value="en-US">English (US)</option>
+      <option value="fa-IR">Persian</option>
+      <option value="fr-FR">French</option>
+      <option value="de-DE">German</option>
+      <option value="es-ES">Spanish</option>
+    </select><br><br>
+
+    <button id="startRecord">Start Recording</button>
+    <button id="stopRecord" disabled>Stop Recording</button>
+    <button id="playRecord" disabled>Play Recording</button><br><br>
+
+    <audio id="audioPlayer" controls></audio>
+
+    <h3>Transcript</h3>
+    <textarea id="transcriptBox" rows="6"></textarea>
+    <br>
+    <button id="summarizeBtn">Summarize Transcript</button>
+  </section>
+
+  <section>
+    <h2>Clinical Summary</h2>
+    <div id="chat-box"></div>
+    <div id="spinner"><em>Generating summary...</em></div>
+    <br>
+    <button id="downloadSummaryBtn" style="display:none;">Download Summary</button>
+    <button id="printSummaryBtn" style="display:none;">Print Summary</button>
+  </section>
+
+  <script>
+    const startRecordBtn = document.getElementById('startRecord');
+    const stopRecordBtn = document.getElementById('stopRecord');
+    const playRecordBtn = document.getElementById('playRecord');
+    const audioPlayer = document.getElementById('audioPlayer');
+    const transcriptBox = document.getElementById('transcriptBox');
+    const langSelect = document.getElementById('langSelect');
+    const summarizeBtn = document.getElementById('summarizeBtn');
+    const chatBox = document.getElementById('chat-box');
+    const spinner = document.getElementById('spinner');
+    const downloadBtn = document.getElementById('downloadSummaryBtn');
+    const printBtn = document.getElementById('printSummaryBtn');
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let recognition;
+    let finalTranscript = '';
+    let latestSummary = '';
+
+    startRecordBtn.addEventListener('click', () => {
+      audioChunks = [];
+      finalTranscript = '';
+      transcriptBox.value = '';
+
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            audioPlayer.src = audioUrl;
+          };
+          mediaRecorder.start();
+
+          startRecordBtn.disabled = true;
+          stopRecordBtn.disabled = false;
+          playRecordBtn.disabled = true;
+
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = langSelect.value;
+
+            recognition.onresult = event => {
+              let interim = '';
+              for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                  finalTranscript += event.results[i][0].transcript + ' ';
+                } else {
+                  interim += event.results[i][0].transcript;
+                }
+              }
+              transcriptBox.value = finalTranscript + interim;
+              transcriptBox.scrollTop = transcriptBox.scrollHeight;
+            };
+            recognition.start();
+          } else {
+            transcriptBox.value = "Speech recognition not supported.";
+          }
+        }).catch(err => alert("Microphone error: " + err.message));
+    });
+
+    stopRecordBtn.addEventListener('click', () => {
+      if (mediaRecorder) mediaRecorder.stop();
+      if (recognition) recognition.stop();
+      startRecordBtn.disabled = false;
+      stopRecordBtn.disabled = true;
+      playRecordBtn.disabled = false;
+    });
+
+    playRecordBtn.addEventListener('click', () => audioPlayer.play());
+
+    summarizeBtn.addEventListener('click', async () => {
+      const transcript = transcriptBox.value.trim();
+      if (!transcript) return alert("Transcript is empty.");
+
+      spinner.style.display = 'block';
+      downloadBtn.style.display = 'none';
+      printBtn.style.display = 'none';
+
+       const prompt = `
+      Please extract relevant clinical details from the following patient-doctor conversation and generate a structured and professional clinical note using the template below. Maintain a clear, concise, and formal medical tone. Use bullet points where applicable. Leave placeholders such as "[Not provided]" if the information is missing.
+      
+      ===============================
+               CLINICAL NOTE
+      ===============================
+      
+      Patient Name     : [Not provided]
+      Date of Birth    : [Not provided]
+      Gender           : [Not provided]
+      Patient ID       : [System-generated]
+      Date of Visit    : ${new Date().toLocaleDateString('en-AU')}
+      
+      ----------------------------------------
+      CHIEF COMPLAINT (CC)
+      ----------------------------------------
+      [Insert main symptom or concern from patient]
+      
+      ----------------------------------------
+      HISTORY OF PRESENT ILLNESS (HPI)
+      ----------------------------------------
+      [Insert detailed narrative using bullet points]
+      
+      ----------------------------------------
+      PAST MEDICAL HISTORY (PMH)
+      ----------------------------------------
+      • [Condition 1]
+      • [Condition 2]
+      [Or insert "[Not provided]"]
+      
+      ----------------------------------------
+      CURRENT MEDICATIONS
+      ----------------------------------------
+      • [Medication name, dosage, frequency]
+      [Or insert "[Not provided]"]
+      
+      ----------------------------------------
+      ALLERGIES
+      ----------------------------------------
+      • [Allergen] – [reaction]
+      [Or insert "[Not provided]"]
+      
+      ----------------------------------------
+      FAMILY HISTORY (FH)
+      ----------------------------------------
+      • [Family member]: [Condition]
+      [Or insert "[Not provided]"]
+      
+      ----------------------------------------
+      SOCIAL HISTORY (SH)
+      ----------------------------------------
+      • Occupation: [Not provided]
+      • Smoking: [Not provided]
+      • Alcohol: [Not provided]
+      • Exercise/Diet: [Not provided]
+      
+      ----------------------------------------
+      REVIEW OF SYSTEMS (ROS)
+      ----------------------------------------
+      • General: [e.g., fatigue, fever]
+      • Respiratory: [e.g., cough, shortness of breath]
+      • Cardiovascular: [e.g., palpitations]
+      • Gastrointestinal: [e.g., nausea]
+      • Neurological: [e.g., dizziness]
+      • Skin: [e.g., rash]
+      • ENT: [e.g., sore throat]
+      [Only include systems mentioned in the transcript]
+      
+      ----------------------------------------
+      VITAL SIGNS
+      ----------------------------------------
+      (To be recorded during clinical intake)
+      
+      ----------------------------------------
+      CLINICAL IMPRESSION / PLAN
+      ----------------------------------------
+      • [Diagnosis or differential diagnosis]
+      • [Recommended investigations or follow-up]
+      • [Initial treatment or management plan]
+      
+      Physician: Dr. [Name]
+      Signature: _______________________
+      Date: ${new Date().toLocaleDateString('en-AU')}
+      
+      -------------------------------
+      TRANSCRIPT
+      -------------------------------
+      ${transcript}
+      `;
+
+      try {
+        const response = await fetch('https://a8lhx0zjp9.execute-api.ap-southeast-2.amazonaws.com/dev/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        });
+
+        const data = await response.json();
+        latestSummary = data.response;
+
+        const highlighted = latestSummary.replace(/\[Not provided\]/g, '<span class="highlight">[Not provided]</span>');
+
+        chatBox.innerHTML = `<div class="message bot"><strong>Bot:</strong><pre>${highlighted}</pre></div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        downloadBtn.style.display = 'inline-block';
+        printBtn.style.display = 'inline-block';
+      } catch (err) {
+        console.error(err);
+        chatBox.innerHTML = `<div class="message bot"><strong>Bot:</strong> Summarization failed.</div>`;
+      } finally {
+        spinner.style.display = 'none';
+      }
+    });
+
+   downloadBtn.addEventListener('click', async () => {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      // Split text to fit page width
+      const lines = doc.splitTextToSize(latestSummary, 180);
+      doc.setFont('courier', 'normal');
+      doc.setFontSize(11);
+      doc.text(lines, 10, 20);
+    
+      doc.save(`clinical-summary-${Date.now()}.pdf`);
+    });
+
+  printBtn.addEventListener('click', () => {
+      const printWindow = window.open('', '_blank');
+      const cleanContent = latestSummary.replace(/\n/g, '<br>').replace(/\[Not provided\]/g, '<span style="background:#fff3cd;color:#856404;font-weight:bold;">[Not provided]</span>');
+      printWindow.document.write(`<html><head><title>Print Summary</title></head><body style="font-family:monospace;padding:20px;">${cleanContent}</body></html>`);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    });
+
+  </script>
+</body>
+</html>
